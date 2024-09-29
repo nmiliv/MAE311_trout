@@ -1,0 +1,9 @@
+[submodule "Adafruit_BMP3XX"]
+	path = Adafruit_BMP3XX
+	url = https://github.com/adafruit/Adafruit_BMP3XX.git
+[submodule "Adafruit_ICM20X"]
+	path = Adafruit_ICM20X
+	url = https://github.com/adafruit/Adafruit_ICM20X.git
+[submodule "Adafruit_GPS"]
+	path = Adafruit_GPS
+	url = https://github.com/adafruit/Adafruit_GPS.git
