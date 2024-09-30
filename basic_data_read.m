@@ -5,6 +5,10 @@ clc, clear
 % also it only works on 2024 or newer matlab (won't work on my bolved
 % 2023b)
 
+% basically just records data for five sceonds, displays it live while
+% gathering, and then throws it all in the excel sheet. Important: excel
+% sheet will get delted every time this script is run!
+
 delete(serialportfind);
 portslist = serialportlist()
 serialObj = serialport(portslist(1),9600) % change this line to change which port is selected
@@ -13,15 +17,23 @@ flush(serialObj);
 serialObj.UserData = struct("Data",[],"Count",1)
 
 n = 0;
-while(n < 10)
+dt = 0.05;
+while(n < 5/dt)
     % serialObj.UserData.Data = [];
     % serialObj.UserData.Count = 0;
     maxDataPoints = 1002; 
     configureCallback(serialObj, "terminator", @(src,event) readSineWaveData(src,event,maxDataPoints))
     plot(serialObj.UserData.Data(2:end));
-    % n = n + 1;
-    pause(0.05)
+    n = n + 1;
+    pause(dt)
 end
+
+if exist('testdaat.txt', 'file')==2
+  delete('testdata.txt');
+end
+T = table(serialObj.UserData.Data');
+filename = 'testdata.xlsx';
+writetable(T,filename,'Sheet',1,'Range','B1')
 
 function readSineWaveData(src, ~, maxDataPoints)
 
