@@ -127,7 +127,7 @@ String header = "time [ms], "
                 "BNO xa [m/s^2], BNO ya [], BNO za [], "
                 "BNO xg [rad/s], BNO yg [], BNO zg [], "
                 "BNO xm [uT], BNO ym [], BNO zm [], "
-                "GPS lat [deg.min], GPS lon [deg.min], GPS speed [m/s], GPS angle [deg], GPS alt [m], "
+                "GPS lat [deg.min], GPS lon [deg.min], GPS speed [m/s], GPS angle [deg], GPS alt [m], GPS sat [#]"
                 "ICM temp [degC], ICM accel x [m/s^2], ICM accel y [m/s^2], ICM accel z [m/s^2], "
                 "ICM gyro x [rad/s], ICM gyro y [rad/s], ICM gyro z [rad/s], "
                 "ICM mag x [], ICM mag y [], ICM mag z []";
@@ -155,10 +155,11 @@ void setup() {
     //Serial.println("Could not find a valid BMP3 sensor, check wiring!");
     while (1);
   }
-  if(!GPS.begin(0x10)){
-    Serial.println("Could not find a valid GPS sensor, check wiring!");
-    // while(1);
-  }
+
+  // if(!GPS.begin(0x10)){
+  //   //Serial.println("Could not find a valid GPS sensor, check wiring!");
+  //   while(1);
+  // }
   if (!icm.begin_I2C()) {
     //Serial.println("Could not find a valid ICM sensor, check wiring!");
     while(1);
@@ -264,6 +265,7 @@ void State0(){                                // execute state 0
     serial = FALSE;
     LCD = FALSE;
     dumpSD = false;
+
 
     lcd.clear();
     lcd.print("MODE: SLEEP");
@@ -753,6 +755,7 @@ void printSerial(bool serial){
       Serial.print("\t");
       Serial.print(BNO_Z_magn);
       Serial.print("\t");
+
       // GPS Readings
       Serial.print(GPS_latitude);
       Serial.print("\t");
