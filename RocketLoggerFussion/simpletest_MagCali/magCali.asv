@@ -1,0 +1,23 @@
+%% Import CSV file into the workspace
+magDataRAW = readtable("magData.csv");
+% Use curly braces instead of parenthesis to store numerica values
+% from table
+x = magDataRAW{:,"Var1"};
+y = magDataRAW{:,"Var2"};
+z = magDataRAW{:,"Var3"};
+D = [x, y, z]; % Data
+
+%% Get Calibration Coefficients and Offsets
+[A, b, expmfs] = magcal(D);
+% A is coefficient correction matrix
+% b is offset matri
+
+
+
+% % Create data mesh
+% vectorSize = 10000; % Depends on data precision
+% xVector = linspace(min(x), max(x), vectorSize);
+% yVector = linspace(min(y), max(y), vectorSize);
+% [X, Y] = meshgrid(xVector,yVector);
+% Z = griddata(x,y,z,X,Y);
+% mesh(X,Y,Z)

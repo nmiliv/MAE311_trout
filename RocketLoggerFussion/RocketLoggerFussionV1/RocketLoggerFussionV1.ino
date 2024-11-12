@@ -7,6 +7,7 @@ Description:
             View Data on LCD
   -State 2: 
             Record Data on SD Card
+  -State 3: dump most recent SD file
 
   -If the button is pressed for longer than 1 seconds 'cancel' the change in state
 
@@ -57,6 +58,7 @@ int buttonState1;                              // check the state of the button
 int buttonState2;
 int State = 0;                                // stores state of system
 int subState = 0;
+int caliState = 0;
                                                   // 0 = state0
                                                   // 1 = state1
                                                   // 2 = state2
@@ -76,6 +78,18 @@ float BMP_alt = 0; // [m] above specified sealevel
 double BNO_X = 0; // [m]                      // Initialize BNO variables
 double BNO_Y = 0; // [m]
 double BNO_Z = 0; // [m]
+
+double BNO_X_accl = 0;
+double BNO_Y_accl = 0;
+double BNO_Z_accl = 0;
+
+double BNO_X_gyro = 0;
+double BNO_Y_gyro = 0;
+double BNO_Z_gyro = 0;
+
+double BNO_X_magn = 0;
+double BNO_Y_magn = 0;
+double BNO_Z_magn = 0;
 
 uint32_t timer = millis(); // [ms]            // initialize GPS timer
 
@@ -101,17 +115,23 @@ double ICM_mag_y = 0; // [uT]
 double ICM_mag_z = 0; // [uT]
 
 bool LCD = FALSE;
-bool serial = FALSE;
+bool serial = TRUE;
 bool save = FALSE;
 bool headerStateSerial = FALSE;
 bool headerState = FALSE;
+bool dumpSD = false;
+File currDumpFile;
 String header = "time [ms], "
-                "BMP temp [degC], BMP pres [], BMP alt [], "
+                "BMP temp [degC], BMP pres [mbar], BMP alt [m], "
                 "BNO x [deg], BNO y [deg], BNO z [deg], "
+                "BNO xa [m/s^2], BNO ya [], BNO za [], "
+                "BNO xg [rad/s], BNO yg [], BNO zg [], "
+                "BNO xm [uT], BNO ym [], BNO zm [], "
                 "GPS lat [deg.min], GPS lon [deg.min], GPS speed [m/s], GPS angle [deg], GPS alt [m], "
                 "ICM temp [degC], ICM accel x [m/s^2], ICM accel y [m/s^2], ICM accel z [m/s^2], "
                 "ICM gyro x [rad/s], ICM gyro y [rad/s], ICM gyro z [rad/s], "
                 "ICM mag x [], ICM mag y [], ICM mag z []";
+elapsedMillis timestamp = 0;
 
 void setup() {
   pinMode(switchPin1, INPUT);                  // set the switch pin as the input 
@@ -120,33 +140,35 @@ void setup() {
   pinMode(Green, OUTPUT);                      // set the led pin as the output
   pinMode(Blue, OUTPUT);                       // set the led pin as the output
 
-  Serial.begin(115200);                        // set up the serial communication
-  while(!Serial){}
+  if(serial){
+      Serial.begin(115200);                        // set up the serial communication
+      delay(500);
+  }
   buttonState1 = digitalRead(switchPin1);      // read the initial button state
   
 //////////////////////////// INITIALIZE SENSORS  ////////////////////////////////////
   if(!bno.begin()){
-    Serial.print("Could not find a valid BNO055 sensor, check wiring!");
+    //Serial.print("Could not find a valid BNO055 sensor, check wiring!");
     while(1);
   }
   if(!bmp.begin_I2C()) {
-    Serial.println("Could not find a valid BMP3 sensor, check wiring!");
+    //Serial.println("Could not find a valid BMP3 sensor, check wiring!");
     while (1);
   }
   if(!GPS.begin(0x10)){
     Serial.println("Could not find a valid GPS sensor, check wiring!");
-    while(1);
+    // while(1);
   }
   if (!icm.begin_I2C()) {
-    Serial.println("Could not find a valid ICM sensor, check wiring!");
+    //Serial.println("Could not find a valid ICM sensor, check wiring!");
     while(1);
   }
   if (!SD.begin(10)) {
-    Serial.println("Could not find a valid SD writer, check wiring!");
+    //Serial.println("Could not find a valid SD writer, check wiring!");
     while (1);
   }
   
-  Serial.println("initialization done; all sensors detected"); // All systems are a-go!
+  //Serial.println("initialization done; all sensors detected"); // All systems are a-go!
 
   bno.setExtCrystalUse(true);
 
@@ -162,27 +184,20 @@ void setup() {
   icm.setAccelRange(ICM20948_ACCEL_RANGE_16_G);
   icm.setGyroRange(ICM20948_GYRO_RANGE_2000_DPS);
   icm.setMagDataRate(AK09916_MAG_DATARATE_10_HZ);
-  //  icm.setAccelRateDivisor(4095);
-  uint16_t accel_divisor = icm.getAccelRateDivisor();
-  float accel_rate = 1125 / (1.0 + accel_divisor);
-  //  icm.setGyroRateDivisor(255);
-  uint8_t gyro_divisor = icm.getGyroRateDivisor();
-  float gyro_rate = 1100 / (1.0 + gyro_divisor);
+  // //  icm.setAccelRateDivisor(4095);
+  // uint16_t accel_divisor = icm.getAccelRateDivisor();
+  // float accel_rate = 1125 / (1.0 + accel_divisor);
+  // //  icm.setGyroRateDivisor(255);
+  // uint8_t gyro_divisor = icm.getGyroRateDivisor();
+  // float gyro_rate = 1100 / (1.0 + gyro_divisor);
 
   delay(1000);                                    // wait 1 second before executing loop function
-  Serial.println();
-  Serial.println("System start up, State 0");
-  
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
-  // myFile = SD.open("test1.txt", FILE_WRITE); // name file here
-  // if(myFile){
-  //   Serial.println("File Open");
-  // }else{
-  //   Serial.println("File NOT Open");
-  // }
+  //Serial.println();
+  //Serial.println("System start up, State 0");
 
   lcd.begin(16, 2);                            // set up the LCD's number of columns and rows
+
+  //getCalibration();                           // load in the calibration values from the SD card (correction coeff. and offset)
 }
 
 void loop() {
@@ -194,16 +209,21 @@ void loop() {
     buttonDuration(val);                      // check the button press duration
     if (val != buttonState1 && buttonDiff < buttonInterval) { // check if the state has changed AND if the button has been pressed longer than the interval value
       if (val == LOW) {                       // check if the button is being pressed
+        /*
         if (State == 0) {                     // check if previously in state 0
           State = 1;                          // change the state to 1
-          Serial.println("Button just pressed, State 1");
+          //Serial.println("Button just pressed, State 1");
         }else if (State == 1){                // check if previously in state 1 
           State = 2;                          // change to 2
-          Serial.println("Button just pressed, State 2");
+          //Serial.println("Button just pressed, State 2");
+          timestamp = 0;
         }else{                                // check if reviously in state 2 
           State = 0;                          // change state to 0
-          Serial.println("Button just pressed, State 0");
+          //Serial.println("Button just pressed, State 0");
         }
+        */
+        State++;
+        State %= 5;
       }
     }
   }
@@ -211,9 +231,12 @@ void loop() {
   State0();                                   // Mode 0: do not record any sensor data, stay silent and sleep
   State1();                                   // Mode 1: read data from all sensors and display to LCD
   State2();                                   // Mode 2: Log Data to SD Card
+  State3();
+  State4();
 
   //printSerial(serial);                        // print data to the serial monitor
-  printSerial(0);
+  //printSerial(0);
+  printSerial(serial);
   saveSD(save);
   printLCD(LCD);
 
@@ -236,12 +259,14 @@ void State0(){                                // execute state 0
     analogWrite(Red, 255);
     analogWrite(Green, 0);
     analogWrite(Blue, 0);
-
-    lcd.clear();
-    lcd.print("MODE: SLEEP");
+    
     save = FALSE;
     serial = FALSE;
     LCD = FALSE;
+    dumpSD = false;
+
+    lcd.clear();
+    lcd.print("MODE: SLEEP");
   }
 }
 
@@ -270,6 +295,19 @@ void State1(){                                // execute state 1
     BNO_X = euler.x(); // [deg]                  // angle about x
     BNO_Y = euler.y(); // [deg]                  // angle about y
     BNO_Z = euler.z(); // [deg]                  // angle about z
+    
+    imu::Vector<3> accl = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+    imu::Vector<3> magn = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
+    BNO_X_accl = accl.x();
+    BNO_Y_accl = accl.y();
+    BNO_Z_accl = accl.z();
+    BNO_X_gyro = gyro.x();
+    BNO_Y_gyro = gyro.y();
+    BNO_Z_gyro = gyro.z();
+    BNO_X_magn = magn.x();
+    BNO_Y_magn = magn.y();
+    BNO_Z_magn = magn.z();
 
     // GPS readings
     GPS.read();
@@ -332,6 +370,8 @@ void State2(){                                // execute state 2
     analogWrite(Blue, 255);
     lcd.clear();
     lcd.print("MODE: LOGGING...");
+    lcd.setCursor(0, 1);
+    lcd.print(myFile.name());
 
     save = TRUE;
     serial = TRUE;
@@ -350,6 +390,19 @@ void State2(){                                // execute state 2
     BNO_X = euler.x(); // [deg]                  // angle about x
     BNO_Y = euler.y(); // [deg]                  // angle about y
     BNO_Z = euler.z(); // [deg]                  // angle about z
+
+    imu::Vector<3> accl = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    imu::Vector<3> magn = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    BNO_X_accl = accl.x();
+    BNO_Y_accl = accl.y();
+    BNO_Z_accl = accl.z();
+    BNO_X_gyro = gyro.x();
+    BNO_Y_gyro = gyro.y();
+    BNO_Z_gyro = gyro.z();
+    BNO_X_magn = magn.x();
+    BNO_Y_magn = magn.y();
+    BNO_Z_magn = magn.z();
 
     // GPS readings
     GPS.read();
@@ -399,6 +452,76 @@ void State2(){                                // execute state 2
     ICM_mag_x = ICM_mag.magnetic.x; // [uT]
     ICM_mag_y = ICM_mag.magnetic.y; // [uT]
     ICM_mag_z = ICM_mag.magnetic.z; // [uT]
+    currDumpFile = myFile;
+  }
+}
+
+void State3(){
+  if(State != 3){
+  }else if(State == 3){
+    // grr....
+    // so. on entering S3, need to find last file on SD card
+    // each time the button is pressed, decrement the file
+    // keep track of the current dump file, need to pass this to the next state
+
+    analogWrite(Red, 255);
+    analogWrite(Green, 255);
+    analogWrite(Blue, 0);
+
+    save = FALSE;
+    serial = FALSE;
+    LCD = FALSE;
+
+
+    // File lastFile = findLastFile();
+
+    int subVal = digitalRead(switchPin2);           // read the input of the switch (1/0)
+    delay(10);                                  // wait 10 ms to read switch state again
+    int subVal2 = digitalRead(switchPin2);          // read the input of the switch (1/0)
+    if (subVal == subVal2) {                          // compare the 2 readings for bounce
+      buttonDuration(subVal);                      // check the button press duration
+      if (subVal != buttonState2 && buttonDiff < buttonInterval) { // check if the state has changed AND if the button has been pressed longer than the interval value
+        if (subVal == LOW) {
+          currDumpFile = findLastFile(currDumpFile);
+          // Serial.println("wahoo!");
+        }
+      }
+    }
+    buttonState2 = subVal;
+
+    // currDumpFile = lastFile;
+    if(!currDumpFile){
+      
+    }
+    lcd.clear();
+    lcd.home();
+    lcd.print(currDumpFile.name());
+
+    dumpSD = false;
+    // Serial.println("teehee1!");
+  }
+}
+
+void State4(){
+  if(State != 4){
+
+  }else if(State == 4){
+    // Serial.println("teehee2!");
+    if(!dumpSD){
+      // Serial.println("teehee3!");
+      // currDumpFile.open(O_RDONLY);
+      while(currDumpFile.available()){
+        Serial.write(currDumpFile.read());
+        analogWrite(Red,   70*(sin(millis()/100.f/2/3.1415)+1));
+        analogWrite(Green, 0);
+        analogWrite(Blue,  70*(sin(millis()/100.f/2/3.1415 + 3.f*3.1415/3.f)+1));
+      }
+      currDumpFile.close();
+      dumpSD = true;
+    }
+    analogWrite(Red, 170);
+    analogWrite(Green, 170);
+    analogWrite(Blue, 170);
   }
 }
 
@@ -406,9 +529,18 @@ void saveSD(bool save){
 
   if(save){ // check if save to SD is turned on and the file is open
     if (!headerState){
-      myFile = SD.open("test1.txt", FILE_WRITE); // name file here
+      char filename[] = "soy000.csv";
+      for(int i = 1; i < 1000; i++){
+        //make a new file name
+        filename[3] = i/100 + '0';
+        filename[4] = i/10  + '0';
+        filename[5] = i%10  + '0';
+        //test the name
+        if(!SD.exists(filename)) break; // no need to continue
+      }
+      myFile = SD.open(filename, FILE_WRITE); // name file here
       if(myFile){
-        Serial.println("File Open");
+        //Serial.println("File Open");
         myFile.println(header);                       // Write the header for the data
         headerState = TRUE;
       }else{
@@ -416,7 +548,7 @@ void saveSD(bool save){
       }
     }else{
       // BMP Readings
-      myFile.print(millis());
+      myFile.print(timestamp);
       myFile.print(", ");
       myFile.print(BMP_temp);
       myFile.print(", ");
@@ -430,6 +562,27 @@ void saveSD(bool save){
       myFile.print(BNO_Y);
       myFile.print(", ");
       myFile.print(BNO_Z);
+      myFile.print(", ");
+
+      myFile.print(BNO_X_accl);
+      myFile.print(", ");
+      myFile.print(BNO_Y_accl);
+      myFile.print(", ");
+      myFile.print(BNO_Z_accl);
+      myFile.print(", ");
+
+      myFile.print(BNO_X_gyro);
+      myFile.print(", ");
+      myFile.print(BNO_Y_gyro);
+      myFile.print(", ");
+      myFile.print(BNO_Z_gyro);
+      myFile.print(", ");
+
+      myFile.print(BNO_X_magn);
+      myFile.print(", ");
+      myFile.print(BNO_Y_magn);
+      myFile.print(", ");
+      myFile.print(BNO_Z_magn);
       myFile.print(", ");
       // GPS Readings
       myFile.print(GPS_latitude);
@@ -464,14 +617,46 @@ void saveSD(bool save){
       myFile.print(ICM_mag_y);
       myFile.print(", ");
       myFile.println(ICM_mag_z);
+      myFile.flush();
     }
   }else{
     if(myFile){
       myFile.close();                         // close the data logging file if its open
       headerState = FALSE;
-      Serial.println("File Closed");
+      //Serial.println("File Closed");
     }
   }
+}
+
+File findLastFile(){
+  File currFile;
+  File lastFile;
+  File root = SD.open("/");
+  while(true){
+    lastFile = currFile;
+    currFile = root.openNextFile();
+    if(! currFile){
+      break;
+    }
+  }
+  return lastFile;
+}
+
+File findLastFile(File next){
+  // if(*next == NULL){
+  //   return findLastFile();
+  // }
+  File currFile;
+  File lastFile;
+  File root = SD.open("/");
+  while(true){
+    lastFile = currFile;
+    currFile = root.openNextFile();
+    if(strcmp(currFile.name(), next.name()) == 0){
+      break;
+    }
+  }
+  return lastFile;
 }
 
 void printLCD(bool LCD){
@@ -532,54 +717,102 @@ void printSerial(bool serial){
       headerStateSerial = TRUE;
     }else{
       // BMP Readings
-      Serial.print(millis());
-      Serial.print(", ");
+      Serial.print(timestamp);
+      Serial.print("\t");
       Serial.print(BMP_temp);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(BMP_pres);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(BMP_alt);
-      Serial.print(", ");
+      Serial.print("\t");
       // BNO Readings
       Serial.print(BNO_X);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(BNO_Y);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(BNO_Z);
-      Serial.print(", ");
+      Serial.print("\t");
+
+      Serial.print(BNO_X_accl);
+      Serial.print("\t");
+      Serial.print(BNO_Y_accl);
+      Serial.print("\t");
+      Serial.print(BNO_Z_accl);
+      Serial.print("\t");
+
+      Serial.print(BNO_X_gyro);
+      Serial.print("\t");
+      Serial.print(BNO_Y_gyro);
+      Serial.print("\t");
+      Serial.print(BNO_Z_gyro);
+      Serial.print("\t");
+
+      Serial.print(BNO_X_magn);
+      Serial.print("\t");
+      Serial.print(BNO_Y_magn);
+      Serial.print("\t");
+      Serial.print(BNO_Z_magn);
+      Serial.print("\t");
       // GPS Readings
       Serial.print(GPS_latitude);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(GPS_longitude);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(GPS_speed);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(GPS_angle);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(GPS_alt);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(GPS_sats);
-      Serial.print(", ");
+      Serial.print("\t");
       // ICM Readings
       Serial.print(ICM_temp1);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_accel_x);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_accel_y);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_accel_z);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_gyro_x);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_gyro_y);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_gyro_z);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_mag_x);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.print(ICM_mag_y);
-      Serial.print(", ");
+      Serial.print("\t");
       Serial.println(ICM_mag_z);
     }
   }
 }
+
+/*
+float getCalibration(){
+  // get calibration values from SD card file
+  kMagX
+  kMagY
+  kMagZ
+  kGyroX
+  kGyroY
+  kGyroZ
+  kAccX
+  kAccy
+  kAccz
+  kAlt
+
+  bMagX
+  bMagY
+  bMagZ
+  bGyroX
+  bkGyroY
+  bGyroZ
+  bAccX
+  bAccy
+  bAccz
+  bAlt
+}
+*/
