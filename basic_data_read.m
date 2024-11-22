@@ -11,14 +11,14 @@ clc, clear
 
 delete(serialportfind);
 portslist = serialportlist()
-serialObj = serialport(portslist(1),9600) % change this line to change which port is selected
-configureTerminator(serialObj,"CR/LF");
+serialObj = serialport(portslist(16),115200) % change this line to change which port is selected
+configureTerminator(serialObj,"\n");
 flush(serialObj);
 serialObj.UserData = struct("Data",[],"Count",1)
 
 n = 0;
 dt = 0.05;
-while(n < 5/dt)
+while(n < 10/dt)
     % serialObj.UserData.Data = [];
     % serialObj.UserData.Count = 0;
     maxDataPoints = 1002; 
@@ -28,7 +28,7 @@ while(n < 5/dt)
     pause(dt)
 end
 
-if exist('testdaat.txt', 'file')==2
+if exist('testdata.txt', 'file')==2
   delete('testdata.txt');
 end
 T = table(serialObj.UserData.Data');
